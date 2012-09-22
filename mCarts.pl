@@ -23,6 +23,7 @@ my $pattern = "";
 my $misMatch = 0;
 my $isRegExp = 0;
 
+my $checkMaf = 0;
 
 my $minSiteNum = 3;
 my $maxDist = 30;
@@ -40,6 +41,7 @@ GetOptions ("ref:s"=>\$refSpecies,
 			"max-dist:i"=>\$maxDist,
 			"train-only"=>\$trainOnly,
 			"exist-model"=>\$existingModel,
+			"check-maf"=>\$checkMaf,
 			"v"=>\$verbose);
 
 if (@ARGV != 1)
@@ -61,6 +63,7 @@ if (@ARGV != 1)
 	print " --max-dist [int]     : max distance allowed in clusters ($maxDist)\n";
 	print " --train-only         : train the model only, no prediction\n";
 	print " --exist-model        : prediction based on existing model specified in out dir\n";
+	print " --check-maf          : check maf files in the library dir\n";
 	print " -v                   : verbose\n";
 	exit (1);
 }
@@ -114,6 +117,9 @@ if ($existingModel)
 }
 else
 {
+	Carp::croak "No positive training data\n" unless -f $trainPosBedFile;
+	Carp::croak "No negative training data\n" unless -f $trainNegBedFile;
+
 	my $ret = system ("mkdir $outDir");
 	Carp::croak "failed to create output dir $outDir\n" if $ret != 0;
 
@@ -144,8 +150,8 @@ my $tmpBLSOutDir = "$outDir/BLS";
 if ($searchMotif)
 {
 	print "searching for individual motif sites and evaluate conservation ...\n" if $verbose;
-	my $cmd = "perl $progDir/BLS/searchConservedMotif.pl -name $motifName -ref $refSpecies -w $pattern -m $misMatch $isRegExpFlag $verboseFlag $libDataDir $tmpBLSOutDir";
-
+	my $ignoreMafFlag = $checkMaf ? "" : "--ignore-maf";
+	my $cmd = "perl $progDir/BLS/searchConservedMotif.pl -name $motifName -ref $refSpecies -w $pattern -m $misMatch $isRegExpFlag $verboseFlag $ignoreMafFlag $libDataDir $tmpBLSOutDir";
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 }
@@ -188,7 +194,7 @@ my $genicMotifBedFile = "$tmpBLSOutDir/$refSpecies.genic.$motifName.bls.chrom.be
 if ($getGenicMotif)
 {
 	print "getting genic motif sites ...\n" if $verbose;
-	my $cmd = "perl $progDir/BLS/tagoverlap.pl -big --keep-score --complete-overlap -region $libDataDir/$refSpecies.genic.bed -ss -d \"#\" $verboseFlag $motifBedFile $genicMotifBedFile.tmp";
+	my $cmd = "perl $progDir/BLS/tagoverlap.pl -big -c $tmpBLSOutDir/cache --keep-score --complete-overlap -region $libDataDir/$refSpecies.genic.bed -ss -d \"#\" $verboseFlag $motifBedFile $genicMotifBedFile.tmp";
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
@@ -276,7 +282,7 @@ if ($getTrainingSites)
 
 	#Pos sites
 	my $motif_vs_trainPosBedFile = "$outDir/tmp/motif_vs_train_pos.bed";
-	my $cmd = "perl $progDir/BLS/tagoverlap.pl -big -region $trainPosBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainPosBedFile";
+	my $cmd = "perl $progDir/BLS/tagoverlap.pl -c $outDir/cache -big -region $trainPosBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainPosBedFile";
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
@@ -309,7 +315,7 @@ if ($getTrainingSites)
 	####
 	#Neg sites
 	my $motif_vs_trainNegBedFile = "$outDir/tmp/motif_vs_train_neg.bed";
-	$cmd = "perl $progDir/BLS/tagoverlap.pl -big -region $trainNegBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainNegBedFile";
+	$cmd = "perl $progDir/BLS/tagoverlap.pl -c $outDir/cache -big -region $trainNegBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainNegBedFile";
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 

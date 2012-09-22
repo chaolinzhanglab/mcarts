@@ -25,6 +25,8 @@ my $misMatch = 0;
 my $searchBothStrand = 0;
 my $incSiteLostInRef = 0;
 my $motifListFile = "";
+my $ignoreMaf = 0; #take whatever maf2fa files that exist, otherwise check maf files and regenerate non-existing maf2fa files
+
 my $taskName = "motif";
 
 my $verbose = 0;
@@ -39,6 +41,7 @@ GetOptions ("ref:s"=>\$refSpecies,
 			"l:s"=>\$motifListFile,
 			"b"=>\$searchBothStrand,
 			"inc-loss-in-ref"=>\$incSiteLostInRef,
+			"ignore-maf"=>\$ignoreMaf,
 			"name:s"=>\$taskName,
 			"v"=>\$verbose);
 
@@ -55,6 +58,7 @@ if (@ARGV != 2)
 	print " -r               : the motifs provided are regular expressions (will disable -n and -m)\n"; 
 	print " -b               : search both strands\n";
 	print " --inc-loss-in-ref: include sites lost in reference genome\n";
+	print " --ignore-maf     : ignore maf files and take existing maf2fa files\n";
 	print " --name [string]  : task name ($taskName)\n";
 	print " -v               : verbose\n";
 	exit (1);
@@ -136,38 +140,61 @@ my @regions = qw(genic.ext10k);
 my $nsplit = 0;
 my $prefix = $refSpecies;
 
-foreach my $r (@regions)
+if ($ignoreMaf)
 {
-	my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.* | wc -l";
-
-	my $n = `$cmd`;
-	chomp $n;
-	if ($nsplit == 0)
+	foreach my $r (@regions)
 	{
-		$nsplit = $n;
-		Carp::croak "cannot detect the number of splits of maf files\n" if $nsplit <= 0;
-
-		print "$nsplit splits of maf data detected\n" if $verbose;
-	}
-	else
-	{
-		Carp::croak "inconsistency in number of splits for maf files\n" if $n != $nsplit;
-	}
-
-
-	for (my $i = 0; $i < $nsplit; $i++)
-	{
-		my $mafFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.$i";
-		my $maf2faFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.$i.maf2fa";
-		next if -f $maf2faFile;
-
-		my $cmd = "perl $progDir/maf2fasta.pl  -G -v -s 60 $mafFile $maf2faFile";
-		print "$cmd ...\n";
-		my $ret = system ($cmd);
-		print "CMD $cmd failed: $?\n" if $ret != 0;
+		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.*.maf2fa | wc -l";
+	
+		my $n = `$cmd`;
+		chomp $n;
+		if ($nsplit == 0)
+		{
+			$nsplit = $n;
+			Carp::croak "cannot detect the number of splits of maf files\n" if $nsplit <= 0;
+	
+			print "$nsplit splits of maf data detected\n" if $verbose;
+		}
+		else
+		{
+			Carp::croak "inconsistency in number of splits for maf files\n" if $n != $nsplit;
+		}
 	}
 }
+else
+{
+	foreach my $r (@regions)
+	{
+		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.* | wc -l";
+	
+		my $n = `$cmd`;
+		chomp $n;
+		if ($nsplit == 0)
+		{
+			$nsplit = $n;
+			Carp::croak "cannot detect the number of splits of maf files\n" if $nsplit <= 0;
+	
+			print "$nsplit splits of maf data detected\n" if $verbose;
+		}
+		else
+		{
+			Carp::croak "inconsistency in number of splits for maf files\n" if $n != $nsplit;
+		}
 
+	
+		for (my $i = 0; $i < $nsplit; $i++)
+		{
+			my $mafFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.$i";
+			my $maf2faFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.$i.maf2fa";
+			next if -f $maf2faFile;
+	
+			my $cmd = "perl $progDir/maf2fasta.pl  -G -v -s 60 $mafFile $maf2faFile";
+			print "$cmd ...\n";
+			my $ret = system ($cmd);
+			print "CMD $cmd failed: $?\n" if $ret != 0;
+		}
+	}
+}
 
 
 print "generating scripts for motif search ...\n" if $verbose;
@@ -265,16 +292,16 @@ for (my $m = 0; $m < @motifs; $m++)
 			my $motifMafClusterBLS3UTRBedFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.3utr.bed";
 
 			my $ssFlag = $searchBothStrand ? "" : "-ss";
-			print $fout "perl $progDir/tagoverlap.pl $ssFlag -d \"||\" -region $exonFile          -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLSExonBedFile\n";
+			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $exonFile          -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLSExonBedFile\n";
 			
 			my $motifMafClusterBLSExonId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.exon.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLSExonBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t1\"}' | sort | uniq> $motifMafClusterBLSExonId\n";
 
-			print $fout "perl $progDir/tagoverlap.pl $ssFlag -d \"||\" -region $fivePrimeUTRFile  -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS5UTRBedFile\n";
+			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $fivePrimeUTRFile  -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS5UTRBedFile\n";
 			my $motifMafClusterBLS5UTRId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.5utr.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLS5UTRBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t2\"}' | sort | uniq> $motifMafClusterBLS5UTRId\n";
 
-			print $fout "perl $progDir/tagoverlap.pl $ssFlag -d \"||\" -region $threePrimeUTRFile -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS3UTRBedFile\n";
+			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $threePrimeUTRFile -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS3UTRBedFile\n";
 			my $motifMafClusterBLS3UTRId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.3utr.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLS3UTRBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t3\"}' | sort | uniq> $motifMafClusterBLS3UTRId\n";
 			
