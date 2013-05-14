@@ -29,21 +29,21 @@ GetOptions ('c:s'=>\$criteria,
 
 if (@ARGV != 2)
 {
-	print "select uniq rows\n";
-	print "Usage: $prog [options] <in.txt> <out.txt>\n";
-	print "OPTIONS:\n";
-	print " -c     [string]  : criteria to sort ([random]|max_num|max_num_abs|min_num|min_num_abs|max_text|min_text|sum|mean|rowsum|count)\n";
-	print " -id    [int]     : id column (from 0) used to group rows ($groupColIdx)\n";
-	print " -value [int]     : value column (from 0) used to compare rows ($compareColIdx)\n";
-	print " --one-based-index: 1-based column index\n";
-	print " --no-extra-col   : do not print extra columns other than the id and value columns\n";
-	print " -v               : verbose\n";
+	print STDERR "select uniq rows\n";
+	print STDERR "Usage: $prog [options] <in.txt> <out.txt>\n";
+	print STDERR "OPTIONS:\n";
+	print STDERR " -c     [string]  : criteria to sort ([random]|max_num|max_num_abs|min_num|min_num_abs|max_text|min_text|sum|mean|rowsum|count)\n";
+	print STDERR " -id    [int]     : id column (from 0) used to group rows ($groupColIdx)\n";
+	print STDERR " -value [int]     : value column (from 0) used to compare rows ($compareColIdx)\n";
+	print STDERR " --one-based-index: 1-based column index\n";
+	print STDERR " --no-extra-col   : do not print extra columns other than the id and value columns\n";
+	print STDERR " -v               : verbose\n";
 	exit (0);
 }
 
 my ($inFile, $outFile) = @ARGV;
 
-print "CMD= $prog ", join (" ", @ARGV0), "\n";
+print STDERR "CMD= $prog ", join (" ", @ARGV0), "\n";
 if ($oneBasedIndex)
 {
 	$groupColIdx--;
@@ -53,17 +53,26 @@ if ($oneBasedIndex)
 my $fin;
 
 my %rowHash;
-open ($fin, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
+
+if ($inFile eq '-')
+{
+	$fin = *STDIN;
+}
+else
+{
+	open ($fin, "<$inFile") || Carp::croak "can not open file $inFile to read\n";
+}
+
 my $nrow = 0;
 
-print "reading data from $inFile ...\n" if $verbose;
+print STDERR "reading data from $inFile ...\n" if $verbose;
 my $i = 0;
 while (my $line = <$fin>)
 {
 	chomp $line;
 	next if $line=~/^\s*$/;
 
-	print "$i ...\n" if $i % 100000 == 0 && $verbose;
+	print STDERR "$i ...\n" if $i % 100000 == 0 && $verbose;
 
 	$i++;
 	my @cols = split (/\t/, $line);
@@ -78,17 +87,25 @@ while (my $line = <$fin>)
 
 	push @{$rowHash{$groupId}}, {value=> $value, row=>$line};
 }
-close ($fin);
+close ($fin) if $inFile ne '-';
 
 my $ngroup = keys %rowHash;
 
-print "$nrow rows, $ngroup uniq rows loaded\n" if $verbose;
+print STDERR "$nrow rows, $ngroup uniq rows loaded\n" if $verbose;
 
 
 my $fout;
-open ($fout, ">$outFile") || Carp::croak "can not open file $outFile to write\n";
 
-print "dumping unique rows ...\n" if $verbose;
+if ($outFile eq '-')
+{
+	$fout = *STDOUT;
+}
+else
+{
+	open ($fout, ">$outFile") || Carp::croak "can not open file $outFile to write\n";
+}
+
+print STDERR "dumping unique rows ...\n" if $verbose;
 
 $i = 0;
 foreach my $groupId (sort keys %rowHash)
@@ -98,7 +115,7 @@ foreach my $groupId (sort keys %rowHash)
 
 	my $row = "";
 
-	print "$i ...\n" if $i % 10000 == 0 && $verbose;
+	print STDERR "$i ...\n" if $i % 10000 == 0 && $verbose;
 	$i++;
 
 	if ($criteria eq 'random')
@@ -217,4 +234,4 @@ foreach my $groupId (sort keys %rowHash)
 		print $fout $row->{"row"}, "\n";
 	}
 }
-close ($fout);
+close ($fout) if $outFile ne '-';

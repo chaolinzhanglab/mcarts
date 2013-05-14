@@ -151,7 +151,7 @@ if ($searchMotif)
 {
 	print "searching for individual motif sites and evaluate conservation ...\n" if $verbose;
 	my $ignoreMafFlag = $checkMaf ? "" : "--ignore-maf";
-	my $cmd = "perl $progDir/BLS/searchConservedMotif.pl -name $motifName -ref $refSpecies -w $pattern -m $misMatch $isRegExpFlag $verboseFlag $ignoreMafFlag $libDataDir $tmpBLSOutDir";
+	my $cmd = "perl $progDir/BLS/searchConservedMotif.pl --keep-cache -name $motifName -ref $refSpecies -w $pattern -m $misMatch $isRegExpFlag $verboseFlag $ignoreMafFlag $libDataDir $tmpBLSOutDir";
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 }
@@ -237,6 +237,8 @@ if ($formatMotif)
 {
 	print "retrieving accessibility information of individual motif sites ...\n" if $verbose;
 	my $cmd = "perl $progDir/batchFormatConsMotif.pl $verboseFlag $geneContigBedFile $geneContigPUDir $tmpBLSOutDir/split/tab $tmpFormattedMotifOutDir";
+	print $cmd, "\n" if $verbose;
+
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
@@ -283,30 +285,36 @@ if ($getTrainingSites)
 	#Pos sites
 	my $motif_vs_trainPosBedFile = "$outDir/tmp/motif_vs_train_pos.bed";
 	my $cmd = "perl $progDir/BLS/tagoverlap.pl -c $outDir/cache -big -region $trainPosBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainPosBedFile";
+	print $cmd, "\n" if $verbose;
 	my $ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
 	my $motif_vs_trainPosIdPairFile = "$outDir/tmp/motif_vs_train_pos.idpair";
 	$cmd = "awk '{if(\$5==1) {print \$4}}' $motif_vs_trainPosBedFile | awk -F \"#\" '{print \$1\"\\t\"\$2}' | sort | uniq > $motif_vs_trainPosIdPairFile.tmp";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
 	#remove BLS in the id
 	$cmd = "sed 's/\\/\\/[0-9\\.]*\\t/\\t/' $motif_vs_trainPosIdPairFile.tmp > $motif_vs_trainPosIdPairFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 	unlink "$motif_vs_trainPosIdPairFile.tmp";
 
 	my $trainPosFile = "$outDir/train_pos.txt";
 	$cmd = "perl $progDir/removeRow.pl -q 3 -r -v $formattedMotifFile $motif_vs_trainPosIdPairFile > $trainPosFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
-	$cmd = "perl $progDir/BLS/selectRow.pl -q 3 $trainPosFile $motif_vs_trainPosIdPairFile > $trainPosFile.tmp";
+	$cmd = "perl $progDir/BLS/selectRow.pl -q 3 -p -pt \"\" $trainPosFile $motif_vs_trainPosIdPairFile > $trainPosFile.tmp";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
-	$cmd = "paste $trainPosFile.tmp $motif_vs_trainPosIdPairFile | awk '{print \$12\"\\t\"\$2\"\\t\"\$3\"\\t\"\$4\"\\t\"\$5\"\\t\"\$6\"\\t\"\$7\"\\t\"\$8\"\\t\"\$9\"\\t\"\$10}' > $trainPosFile";
+	$cmd = "paste $trainPosFile.tmp $motif_vs_trainPosIdPairFile | awk '{if (NF>6) {print \$12\"\\t\"\$2\"\\t\"\$3\"\\t\"\$4\"\\t\"\$5\"\\t\"\$6\"\\t\"\$7\"\\t\"\$8\"\\t\"\$9\"\\t\"\$10}}' > $trainPosFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 	unlink "$trainPosFile.tmp";
@@ -316,29 +324,35 @@ if ($getTrainingSites)
 	#Neg sites
 	my $motif_vs_trainNegBedFile = "$outDir/tmp/motif_vs_train_neg.bed";
 	$cmd = "perl $progDir/BLS/tagoverlap.pl -c $outDir/cache -big -region $trainNegBedFile -ss $verboseFlag -d \"#\" $genicMotifBedFile  $motif_vs_trainNegBedFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
 	my $motif_vs_trainNegIdPairFile = "$outDir/tmp/motif_vs_train_neg.idpair";
 	$cmd = "awk '{if(\$5==1) {print \$4}}' $motif_vs_trainNegBedFile | awk -F \"#\" '{print \$1\"\\t\"\$2}' | sort | uniq > $motif_vs_trainNegIdPairFile.tmp";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
 	#remove BLS in the id
 	$cmd = "sed 's/\\/\\/[0-9\\.]*\\t/\\t/' $motif_vs_trainNegIdPairFile.tmp > $motif_vs_trainNegIdPairFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 	unlink "$motif_vs_trainNegIdPairFile.tmp";
 
 	$cmd = "perl $progDir/removeRow.pl -q 3 -r -v $formattedMotifFile $motif_vs_trainNegIdPairFile > $trainNegFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
-	$cmd = "perl $progDir/BLS/selectRow.pl -q 3 $trainNegFile $motif_vs_trainNegIdPairFile > $trainNegFile.tmp";
+	$cmd = "perl $progDir/BLS/selectRow.pl -q 3 -p -pt \"\" $trainNegFile $motif_vs_trainNegIdPairFile > $trainNegFile.tmp";
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 
-	$cmd = "paste $trainNegFile.tmp $motif_vs_trainNegIdPairFile | awk '{print \$12\"\\t\"\$2\"\\t\"\$3\"\\t\"\$4\"\\t\"\$5\"\\t\"\$6\"\\t\"\$7\"\\t\"\$8\"\\t\"\$9\"\\t\"\$10}' > $trainNegFile";
+	#some rare cases, some sites are missing
+	$cmd = "paste $trainNegFile.tmp $motif_vs_trainNegIdPairFile | awk '{if (NF>6) {print \$12\"\\t\"\$2\"\\t\"\$3\"\\t\"\$4\"\\t\"\$5\"\\t\"\$6\"\\t\"\$7\"\\t\"\$8\"\\t\"\$9\"\\t\"\$10}}' > $trainNegFile";
+	print $cmd, "\n" if $verbose;
 	$ret = system ($cmd);
 	Carp::croak "CMD $cmd failed: $?\n" if $ret != 0;
 	unlink "$trainNegFile.tmp";

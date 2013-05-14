@@ -721,6 +721,7 @@ sub readSiteFile
 		$i++;
 
 		my ($seqId, $siteStart, $siteEnd, $siteId, $score, $strand, $region, $bls, $pu, $exonic) = split (/\t/, $line);
+		$exonic = 2 if $exonic == 4; #treat lnRNA exon as 3'UTR
 
 		$siteEnd--;
 

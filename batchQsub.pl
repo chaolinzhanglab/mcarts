@@ -21,6 +21,9 @@ my $queueFile = "";
 my $dir = "";
 my $qsubOK = 0;
 my $memory = "";
+my $time = "";
+my $cores = 1;
+
 my $noSGE = 0;
 my $waitForSGE = 0;
 my $verbose = 0;
@@ -28,6 +31,8 @@ my $verbose = 0;
 GetOptions ('c|cache:s'=>\$cache,
 		'j|jobname:s'=>\$jobName,
 		'm|memory:s'=>\$memory,
+		't|time:s'=>\$time,
+		'p:i'=>\$cores,
 		'q|queues:s'=>\$queueFile,
 		'd|dir:s'=>\$dir,
 		'wait'=>\$waitForSGE,
@@ -41,7 +46,9 @@ if (@ARGV != 1)
 	print "Usage: $prog [options] <script.list>\n";
 	print " -c [string]: cache dir for qsub output [$cache]\n";
 	print " -j [string]: job names [$jobName]\n";
+	print " -p    [int]: number of cores for parallel execution ($cores)\n";
 	print " -m [string]: memory (e.g. 2G, default is not to specify)\n";
+	print " -t [string]: running time (e.g. 2:: for 2 hours, and :20: for 20 min)\n";
 	print " -d [string]: dir to be attached to each script [$dir]\n";
 	print " -q [string]: file name specifying queques to be used\n";
 	print " --wait     : wait until the jobs are finished before exiting\n";
@@ -80,9 +87,7 @@ if (-f $queueFile)
 my $scriptListFile = $ARGV [0];
 
 my $fin;
-
-my @jobIds;
-
+my @scriptList;
 open ($fin, "<$scriptListFile") || Carp::croak "can not open file $scriptListFile to read\n";
 while (my $f = <$fin>)
 {
@@ -93,32 +98,57 @@ while (my $f = <$fin>)
 	{
 		$f = "$dir/$f";
 	}
-	my $base = basename ($f);
+
+	push @scriptList, $f;
+}
+
+my @jobIds;
+if ($qsubOK)
+{
+	my $batchScriptFile = "$cache/batch.sh";
+	my $fout;
+	open ($fout, ">$batchScriptFile") || Carp::croak "cannot open file $batchScriptFile to write\n";
+
+	print $fout "#!/bin/bash\n";
+
+	my $njobs = @scriptList;
+	my $paramLine = "#\$ -t 1-$njobs";
+	$paramLine .= " -pe smp $cores" if $cores > 1;
+	$paramLine .= " -N $jobName -cwd -v TMPDIR=$cache -V -e $cache -o $cache";
 	
-	my $memOpt = "";
-	$memOpt = "-l virtual_free=$memory" if $memory;
+	my $resource = "";
+	$resource .= "mem=$memory," if $memory;
+	$resource .= "time=$time," if $time;	
+	chop $resource if $resource;
 
-	#print "qsub -cwd -e $cache -o $cache -N $jobName $f\n";
-	if ($qsubOK)
-	{
+	$paramLine .= " -l \"$resource\"" if $resource;
+	$paramLine .= " -q $queueStr" if $queueStr;
 
-		#use default queues
-		my $queueFlag = $queueStr ne '' ? '-q $queueStr' : '';
+	print $fout $paramLine, "\n";
+	
+	print $fout "files=(", join (" ", @scriptList), ")\n";
+	print $fout "f=\${files\[\$SGE_TASK_ID-1\]}\n";
+	print $fout "bash \$f\n";
+	close ($fout);
 
-		#system ("qsub -cwd $memOpt -v TMPDIR=$cache -e $cache -o $cache -N $jobName.$base $f");
-		#system ("qsub -cwd $memOpt -v TMPDIR=$cache -V -e $cache -o $cache -N $jobName.$base $f");
-		my $ret = `qsub -cwd $memOpt -v $queueFlag TMPDIR=$cache -V -e $cache -o $cache -N $jobName.$base $f`;
-		chomp $ret;
-		my @cols = split (/\s+/, $ret);
-		my $jobId = $cols[2];
-		Carp::croak "invalid job id: $jobId\n" unless $jobId =~/\d+/;
+	my $ret = `qsub $batchScriptFile`;
+	chomp $ret;
+	my @cols = split (/\s+/, $ret);
+	my $jobId = $cols[2];
+	
+	Carp::croak "invalid job id: $jobId\n" unless $jobId =~/\d+/;
+	$jobId =~/^(\d+)\.(\d+)-(\d+):\d+$/;
+	$jobId = $1;
+	my $taskIdStart = $2;
+	my $taskIdEnd = $3;
 
-		push @jobIds, $jobId;
-		
-		print "job id=$jobId submited ...\n" if $verbose;
-		#system ("/chome/sge/bin/glinux/qsub -cwd -v TMPDIR=$cache -V -e $cache -o $cache -N $jobName $f");
-	}
-	else
+	push @jobIds, $jobId;
+
+	print "job id=$jobId ($taskIdStart - $taskIdEnd) submited ...\n" if $verbose;
+}
+else
+{
+	foreach my $f (@scriptList)
 	{
 		print "sh $f> $f.out 2> $f.err\n";
 		my $ret = system ("sh $f > /dev/null");

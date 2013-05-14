@@ -29,6 +29,8 @@ if (@ARGV != 2)
 {
 	print "Convert MAF files to a fasta file\n";
 	print "Usage: $prog [options] <in.maf> <out.fa>\n";
+	print "          use \"-\" for STDIN or STDOUT\n";
+	print "          gzip compressed input is allowed\n";
 	print "OPTIONS:\n";
 	print " -m      : mask repeats <on|[off]>\n";
 	print " -G      : remove gap <on|[off]>\n";
@@ -43,10 +45,32 @@ my ($inMafFile, $outFastaFile) = @ARGV;
 
 
 my $fin;
-open ($fin, "<$inMafFile") || Carp::croak "can not open file $inMafFile to read\n";
 
+if ( $inMafFile eq "-")
+{
+    $fin = *STDIN;
+}
+else
+{
+	if ($inMafFile =~/\.gz$/)
+	{
+		open ($fin, "gunzip -c $inMafFile | ") || Carp::croak "cannot open file $inMafFile to read\n";
+	}
+	else
+	{
+		open ($fin, "<$inMafFile") || Carp::croak "can not open file $inMafFile to read\n";
+	}
+}
 my $fout;
-open ($fout, ">$outFastaFile") || Carp::croak "can not open file $outFastaFile to write\n";
+
+if ($outFastaFile eq '-')
+{
+	$fout = *STDOUT;
+}
+else
+{
+	open ($fout, ">$outFastaFile") || Carp::croak "can not open file $outFastaFile to write\n";
+}
 
 my $blockName = "";
 my $seqPrefix = "";
@@ -125,7 +149,7 @@ while (my $line = <$fin>)
 	}
 }
 
-close ($fin);
-close ($fout);
+close ($fin) if $inMafFile ne '-';
+close ($fout) if $outFastaFile ne '-';
 
 

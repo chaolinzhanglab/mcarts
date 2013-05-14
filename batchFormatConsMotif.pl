@@ -42,7 +42,7 @@ my @probUnpairFiles = `ls $seqRefProbUnpairDir`;
 chop @siteFiles;
 chop @probUnpairFiles;
 
-Carp::croak "the number of split in $seqRefProbUnpairDir and $siteBLSWithExonicDir are different\n" unless $#siteFiles == $#probUnpairFiles;
+Carp::croak "the number of split in $seqRefProbUnpairDir ($#siteFiles) and $siteBLSWithExonicDir ($#probUnpairFiles) are different\n" unless $#siteFiles == $#probUnpairFiles;
 
 my $nsplit = @siteFiles;
 
@@ -94,7 +94,7 @@ foreach my $siteFile (@siteFiles)
 	my $outDIFFile = "$runOutDir/$siteFilePrefix.$iter.$siteFileSuffix.dif1k.txt";
 
 	my $keepCoordFlag = $noCoord ? '' : "-keepcoord";
-	my $cmd = "perl ~/scripts/formatConsMotif.pl -ext $ext $keepCoordFlag -truncate $endToTruncate $verboseFlag $seqRefGenomeBedFile $probUnpairFile $siteFile $outFile";
+	my $cmd = "perl $progDir/formatConsMotif.pl -ext $ext $keepCoordFlag -truncate $endToTruncate $verboseFlag $seqRefGenomeBedFile $probUnpairFile $siteFile $outFile";
 
 	my $scriptFile = "$scriptDir/script.$iter.sh";
 	my $fout;

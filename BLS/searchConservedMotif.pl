@@ -26,6 +26,7 @@ my $searchBothStrand = 0;
 my $incSiteLostInRef = 0;
 my $motifListFile = "";
 my $ignoreMaf = 0; #take whatever maf2fa files that exist, otherwise check maf files and regenerate non-existing maf2fa files
+my $keepCache = 0;
 
 my $taskName = "motif";
 
@@ -43,6 +44,7 @@ GetOptions ("ref:s"=>\$refSpecies,
 			"inc-loss-in-ref"=>\$incSiteLostInRef,
 			"ignore-maf"=>\$ignoreMaf,
 			"name:s"=>\$taskName,
+			"keep-cache"=>\$keepCache,
 			"v"=>\$verbose);
 
 
@@ -60,6 +62,7 @@ if (@ARGV != 2)
 	print " --inc-loss-in-ref: include sites lost in reference genome\n";
 	print " --ignore-maf     : ignore maf files and take existing maf2fa files\n";
 	print " --name [string]  : task name ($taskName)\n";
+	print " --keep-cache     : keep cache files\n";
 	print " -v               : verbose\n";
 	exit (1);
 }
@@ -144,7 +147,7 @@ if ($ignoreMaf)
 {
 	foreach my $r (@regions)
 	{
-		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.*.maf2fa | wc -l";
+		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.*.maf2fa* | wc -l";
 	
 		my $n = `$cmd`;
 		chomp $n;
@@ -165,7 +168,7 @@ else
 {
 	foreach my $r (@regions)
 	{
-		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.* | wc -l";
+		my $cmd = "ls $inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.bed.* | wc -l";
 	
 		my $n = `$cmd`;
 		chomp $n;
@@ -187,8 +190,9 @@ else
 			my $mafFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.$i";
 			my $maf2faFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.$i.maf2fa";
 			next if -f $maf2faFile;
+			next if -f "$maf2faFile.gz";
 	
-			my $cmd = "perl $progDir/maf2fasta.pl  -G -v -s 60 $mafFile $maf2faFile";
+			my $cmd = "perl $progDir/maf2fasta.pl  -G -v -s 60 $mafFile - | gzip -c > $maf2faFile.gz";
 			print "$cmd ...\n";
 			my $ret = system ($cmd);
 			print "CMD $cmd failed: $?\n" if $ret != 0;
@@ -221,6 +225,7 @@ my $presentInRefSpecies = 1 - $incSiteLostInRef;	#the motif has to be present in
 my $exonFile = "$inputDir/$prefix.exon.uniq.bed";
 my $fivePrimeUTRFile = "$inputDir/refGene_knownGene.5utr.bed";
 my $threePrimeUTRFile = "$inputDir/refGene_knownGene.3utr.bed";
+my $ncRNAFile = "$inputDir/refGene_knownGene.ncRNAexon.bed";
 
 for (my $m = 0; $m < @motifs; $m++)
 {
@@ -243,9 +248,10 @@ for (my $m = 0; $m < @motifs; $m++)
 		foreach my $r (@regions)
 		{
 		
-			my $mafFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.$i";
+			#my $mafFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.maf.$i";
 			my $maf2faFile = "$inputDir/$prefix" . "_$r" . "_maf_split/$prefix.$r.$i.maf2fa";
-			
+			$maf2faFile .= ".gz" unless -f $maf2faFile;			
+
 			#search motif
 			my $motifFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.$m.$i.bed";
 			
@@ -290,25 +296,44 @@ for (my $m = 0; $m < @motifs; $m++)
 			my $motifMafClusterBLSExonBedFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.exon.bed";
 			my $motifMafClusterBLS5UTRBedFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.5utr.bed";
 			my $motifMafClusterBLS3UTRBedFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.3utr.bed";
+			my $motifMafClusterBLSncRNABedFile = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.ncrna.bed";
 
 			my $ssFlag = $searchBothStrand ? "" : "-ss";
-			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $exonFile          -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLSExonBedFile\n";
 			
+			#coding
+			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $exonFile          -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLSExonBedFile\n";
 			my $motifMafClusterBLSExonId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.exon.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLSExonBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t1\"}' | sort | uniq> $motifMafClusterBLSExonId\n";
 
+			#5'utr
 			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $fivePrimeUTRFile  -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS5UTRBedFile\n";
 			my $motifMafClusterBLS5UTRId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.5utr.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLS5UTRBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t2\"}' | sort | uniq> $motifMafClusterBLS5UTRId\n";
 
+			#3'utr
 			print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $threePrimeUTRFile -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLS3UTRBedFile\n";
 			my $motifMafClusterBLS3UTRId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.3utr.id";
 			print $fout "awk \'{print \$4}\' $motifMafClusterBLS3UTRBedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t3\"}' | sort | uniq> $motifMafClusterBLS3UTRId\n";
 			
+			#ncrna
+			my $motifMafClusterBLSncRNAId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.ncrna.id";
+			if (-f $ncRNAFile)
+			{
+				print $fout "perl $progDir/tagoverlap.pl -c $outputDir/cache $ssFlag -d \"||\" -region $ncRNAFile -v $motifMafClusterBLSGenomeBedFile $motifMafClusterBLSncRNABedFile\n";
+				print $fout "awk \'{print \$4}\' $motifMafClusterBLSncRNABedFile | awk -F \'|\' \'{print \$1}\' | awk -F \"//\" '{print \$1\"//\"\$2\"//\"\$3\"//\"\$4\"//\"\$5\"\\t4\"}' | sort | uniq> $motifMafClusterBLSncRNAId\n";
+			}
+
 			#combine the three files
 			my $motifMafClusterBLSExonCombineId = "$runResultDir/$prefix.$r.maf2fa.$taskName.mafcoord.$m.$i.bls.chrom.exon.combine.id";
-			print $fout "cat $motifMafClusterBLS5UTRId $motifMafClusterBLS3UTRId $motifMafClusterBLSExonId >> $motifMafClusterBLSExonCombineId\n";
 			
+			if (-f $ncRNAFile)
+			{
+				print $fout "cat $motifMafClusterBLS5UTRId $motifMafClusterBLS3UTRId $motifMafClusterBLSExonId $motifMafClusterBLSncRNAId >> $motifMafClusterBLSExonCombineId\n";
+			}
+			else
+			{
+				print $fout "cat $motifMafClusterBLS5UTRId $motifMafClusterBLS3UTRId $motifMafClusterBLSExonId >> $motifMafClusterBLSExonCombineId\n";
+			}
 			#remove redundant rows
 			print $fout "perl $progDir/uniqRow.pl -c max_num $motifMafClusterBLSExonCombineId $motifMafClusterBLSExonCombineId\n";
 
@@ -349,7 +374,6 @@ my $qsubCache = "$outputDir/qsub";
 my $queues = "";
 system ("perl $progDir/batchQsub.pl -v --wait -c $qsubCache -j $taskName $scriptListFile");
 
-
 print "combine results ...\n" if $verbose;
 for (my $m = 0; $m < @motifs; $m++)
 { 
@@ -368,5 +392,6 @@ for (my $m = 0; $m < @motifs; $m++)
 	}
 }
 
+system ("rm -rf $resultDir") unless $keepCache;
 
 

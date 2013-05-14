@@ -38,7 +38,7 @@ if (@ARGV != 3)
 	print "Map gapless coordinates back to coordinates with gaps in the MAF file\n";
 	print "Usage: $prog [options] <in.bed> <in.maf2fa> <out.bed>\n";
 	print " <in.bed>    : the coordinates according to gapless sequences from the MAF file\n";
-	print " <in.maf2fa> : the gapless sequences extracted from the MAF file\n";
+	print " <in.maf2fa> : the gapless sequences extracted from the MAF file (gzip file is allowed)\n";
 	print " <out.bed>   : the coordinates counting gaps in the map file\n";
 	print "OPTIONS:\n";
 	print " -debug      : print debug information\n";
@@ -56,7 +56,15 @@ my %gapMap;
 
 print "loading gap map information from $inFastaFile ...\n" if $verbose;
 my $fin;
-open ($fin, "<$inFastaFile") || Carp::croak "can not open file $inFastaFile to read\n";
+
+if ($inFastaFile =~/\.gz$/)
+{
+	open ($fin, "gunzip -c $inFastaFile | ") || Carp::croak "cannot open file $inFastaFile to read\n";
+}
+else
+{
+	open ($fin, "<$inFastaFile") || Carp::croak "can not open file $inFastaFile to read\n";
+}
 while (my $line = <$fin>)
 {
 	chomp $line;
