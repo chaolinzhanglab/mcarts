@@ -131,11 +131,22 @@ if ($qsubOK)
 	print $fout "bash \$f\n";
 	close ($fout);
 
-	my $ret = `qsub $batchScriptFile`;
-	chomp $ret;
-	my @cols = split (/\s+/, $ret);
-	my $jobId = $cols[2];
-	
+	#my $ret = `qsub $batchScriptFile`;
+	#chomp $ret;
+	my @lines = `qsub $batchScriptFile`;
+	my $jobId = "";
+	foreach my $ret (@lines)
+	{
+		#in case there are warning messages, ignore them
+		chomp $ret;
+		print "$ret", "\n" if $verbose;
+		if ($ret=~/^Your job/g)
+		{
+			my @cols = split (/\s+/, $ret);
+			$jobId = $cols[2];
+		}
+	}
+
 	Carp::croak "invalid job id: $jobId\n" unless $jobId =~/\d+/;
 	$jobId =~/^(\d+)\.(\d+)-(\d+):\d+$/;
 	$jobId = $1;
